@@ -28,6 +28,28 @@ Resources:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       GenerateSecret: false
+  # ========= IAM Roles =========
+  LibrarySearchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  # ========= Lambdas =========
+  LibrarySearchFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: LibrarySearchFunction
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LibrarySearchExecutionRole.Arn
+      Code: ../lambdas/lambda1
 Outputs:
   UserPoolId:
     Description: ID of the Cognito User Pool
