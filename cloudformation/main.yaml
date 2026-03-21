@@ -10,6 +10,10 @@ Parameters:
     Type: String
     Description: Key for Google Books API
     NoEcho: true
+  GitHubToken:
+    Type: String
+    Description: Personal Access Token for GitHub REST API
+    NoEcho: true
 #
 # ========= Resources =========
 #
@@ -53,7 +57,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-  DevActivityExecutionRole:
+  GitHubActivityExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -77,14 +81,17 @@ Resources:
       Environment:
         Variables:
           GOOGLE_BOOKS_API_KEY: !Ref GoogleBooksApiKey
-  DevActivityFunction:
+  GitHubActivityFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: DevActivityFunction
+      FunctionName: GitHubActivityFunction
       Runtime: python3.13
-      Handler: lambda_function.lambda_handler
-      Role: !GetAtt DevActivityExecutionRole.Arn
+      Handler: lambda_function.handler
+      Role: !GetAtt GitHubActivityExecutionRole.Arn
       Code: ../lambdas/lambda2
+      Environment:
+        Variables:
+          GITHUB_TOKEN: !Ref GitHubToken
   # ========= API Gateway =========
   AssessmentApi:
     Type: AWS::ApiGateway::RestApi
@@ -101,6 +108,13 @@ Resources:
       ProviderARNs:
         - !GetAtt ApiUserPool.Arn
   # ========= API Permissions =========
+  GitHubActivityApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GitHubActivityFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AssessmentApi}/*/GET/activity
   LibrarySearchApiPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -109,6 +123,27 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AssessmentApi}/*/GET/books
   # ========= API Resources and Methods =========
+  # (/activity)
+  ActivityResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt AssessmentApi.RootResourceId
+      PathPart: activity
+      RestApiId: !Ref AssessmentApi
+  ActivityGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      ResourceId: !Ref ActivityResource
+      RestApiId: !Ref AssessmentApi
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt GitHubActivityFunction.Arn
   # (/books)
   BooksResource:
     Type: AWS::ApiGateway::Resource
@@ -131,15 +166,17 @@ Resources:
           - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
           - LambdaArn: !GetAtt BookTitleSearchFunction.Arn
   # ========= API Deployment =========
-  ApiDeployment:
+  ApiDeploymentV2:
     Type: AWS::ApiGateway::Deployment
-    DependsOn: BooksGetMethod
+    DependsOn:
+      - ActivityGetMethod
+      - BooksGetMethod
     Properties:
       RestApiId: !Ref AssessmentApi
   ApiStage:
     Type: AWS::ApiGateway::Stage
     Properties:
-      DeploymentId: !Ref ApiDeployment
+      DeploymentId: !Ref ApiDeploymentV2
       RestApiId: !Ref AssessmentApi
       StageName: prod
 #

@@ -89,7 +89,7 @@ aws cloudformation describe-stacks \
 ```bash
 export ID_TOKEN=$(aws cognito-idp initiate-auth \
   --auth-flow USER_PASSWORD_AUTH \
-  --client-id <YOUR_APP_CLIENT_ID> \
+  --client-id <APP_CLIENT_ID> \
   --auth-parameters USERNAME=testuser@example.com,PASSWORD=$TEST_USER_PASSWORD \
   --query "AuthenticationResult.IdToken" \
   --output text)
