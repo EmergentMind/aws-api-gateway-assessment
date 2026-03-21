@@ -1,0 +1,7 @@
+[project]
+name = "aws-api-gateway-assessment"
+version = "0.1.0"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["lambdas/lambda2"]
