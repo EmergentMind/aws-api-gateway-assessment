@@ -2,6 +2,8 @@
 
 {
   env.GREET = "devenv";
+  dotenv.enable = true;
+
   packages = [
     pkgs.git
     pkgs.nodejs_24
