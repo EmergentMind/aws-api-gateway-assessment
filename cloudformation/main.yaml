@@ -42,10 +42,10 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
   # ========= Lambdas =========
-  LibrarySearchFunction:
+  BookTitleSearchFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: LibrarySearchFunction
+      FunctionName: BookTitleSearchFunction
       Runtime: nodejs20.x
       Handler: index.handler
       Role: !GetAtt LibrarySearchExecutionRole.Arn
