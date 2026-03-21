@@ -4,12 +4,12 @@
 // Search for books by title and return a list of matches including book
 // title, author(s), and isbn (sourced from either isbn10 or isbn13)
 //
+// For simplicity, the query is restricted to a maximum 5 results to encourage
+// more specific search strings
+//
 // This function passes a search string to `books.volumes.list` method of
 // provided by Google Books API
 // https://developers.google.com/books/docs/v1/reference/volumes/list
-//
-// For simplicity, the query is restricted to a maximum 5 results to encourage
-// more specific search strings
 
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 
@@ -71,7 +71,7 @@ export const handler = async (
     }
 
     // fetch data from Google Books
-    // search through book titles only, return a maximum 5 results ordered by relevance
+    // search through book titles only, return a maximum 5 results
     const apiUrl = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(query)}&maxResults=5&key=${apiKey}`;
     const response = await fetch(apiUrl);
 
