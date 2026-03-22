@@ -5,6 +5,7 @@
   dotenv.enable = true;
 
   packages = [
+    pkgs.awscli2
     pkgs.git
     pkgs.nodejs_24
     pkgs.uv
