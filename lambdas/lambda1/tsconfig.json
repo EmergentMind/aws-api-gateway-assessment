@@ -6,8 +6,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "./"
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["index.ts"]
 }
