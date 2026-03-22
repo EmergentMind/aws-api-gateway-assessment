@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 set -e
 
-# load environment vars incase user isn't using direnv
-set -a
-source .env
-set +a
+#load config and helpers
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/config.sh"
+source "$SCRIPT_DIR/helpers.sh"
 
-echo "Running cloudformation package"
+verify_aws_session
+
+# load TOKENS/KEYS from .env
+load_env_vars
+
+echo "Creating package"
 aws cloudformation package \
-  --template-file cloudformation/main.yaml \
-  --s3-bucket api-assessment-bucket-01 \
-  --output-template-file cloudformation/packaged.yaml
+  --template-file "$TEMPLATE_FILE" \
+  --s3-bucket "$S3_BUCKET" \
+  --output-template-file "$PACKAGED_TEMPLATE_FILE"
 
 echo "Deploying package"
 aws cloudformation deploy \
-  --template-file cloudformation/packaged.yaml \
-  --stack-name api-assessment-stack \
+  --template-file "$PACKAGED_TEMPLATE_FILE" \
+  --stack-name "$STACK_NAME" \
   --capabilities CAPABILITY_IAM \
   --parameter-overrides GoogleBooksApiKey="$GOOGLE_BOOKS_API_KEY" GitHubToken="$GITHUB_TOKEN"
 

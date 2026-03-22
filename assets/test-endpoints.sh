@@ -1,40 +1,36 @@
 #!/usr/bin/env bash
 set -e
 
-STACK_NAME="api-assessment-stack"
+#load config and helpers
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/config.sh"
+source "$SCRIPT_DIR/helpers.sh"
 
-echo "Fetching CloudFormation stack details..."
+verify_aws_session
 
-# Fetching values directly using JMESPath filters
+# Fetch details about the stack directly using JMESPath filters
+echo "Fetching details about CloudFormation stack details"
 API_URL=$(aws cloudformation describe-stacks \
   --stack-name "$STACK_NAME" \
-  --query "Stacks.Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
   --output text)
 
 CLIENT_ID=$(aws cloudformation describe-stacks \
   --stack-name "$STACK_NAME" \
-  --query "Stacks.Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
+  --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
   --output text)
 
 # Validation check
 if [ "$API_URL" = "" ] || [ "$API_URL" == "None" ]; then
-  echo "Error: Could not retrieve ApiUrl. Check if the stack name is correct and outputs are defined."
+  echo "Error: Could not retrieve ApiUrl. Check if the STACK_NAME is correct and outputs are defined."
   exit 1
 fi
 
-echo "Stack details found."
-echo "API_URL: $API_URL"
+echo "Stack details retrieved."
+echo "ApiUrl: $API_URL"
+echo "UserPoolClientId: $CLIENT_ID"
 
-echo "Authenticating test user..."
-# Load environment vars
-if [ -f .env ]; then
-  set -a
-  source .env
-  set +a
-else
-  echo "Error: .env file not found."
-  exit 1
-fi
+load_env_vars
 
 # Get the ID Token
 ID_TOKEN=$(aws cognito-idp initiate-auth \
@@ -49,14 +45,7 @@ if [ "$ID_TOKEN" = "" ] || [ "$ID_TOKEN" == "None" ]; then
   exit 1
 fi
 
-echo "Testing /books endpoint..."
-curl -s -G "$API_URL/books" \
-  --data-urlencode "q=permutation city" \
-  -H "Authorization: $ID_TOKEN" | jq .
-
-echo -e "\nTesting /activity endpoint..."
-curl -s -G "$API_URL/activity" \
-  --data-urlencode "repo=torvalds/linux" \
-  -H "Authorization: $ID_TOKEN" | jq .
+test_api_endpoint "/books" "q=permutation city" "$ID_TOKEN"
+test_api_endpoint "/activity" "repo=torvalds/linux" "$ID_TOKEN"
 
 echo -e "\nEndpoint testing complete."
