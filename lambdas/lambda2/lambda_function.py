@@ -60,7 +60,7 @@ def handler(event, context):
                 commits.append({
                     "sha": item.get("sha")[:7], # we only need the short hash
                     "author": item.get("commit", {}).get("author", {}).get("name"),
-                    "message": item.get("commit", {}).get("message", "").split('\n'), # First line only
+                    "message": item.get("commit", {}).get("message", "").split('\n')[0], # First line only
                     "date": item.get("commit", {}).get("author", {}).get("date")
                 })
 
