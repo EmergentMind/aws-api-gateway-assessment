@@ -54,14 +54,21 @@ def handler(event, context):
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode('utf-8'))
 
-            # extract and return the commit metadata we want
             commits = []
             for item in data:
+                # default to empties if data is None/missing
+                commit = item.get("commit") or {}
+                author_info = commit.get("author") or {}
+                message = commit.get("message") or ""
+                sha = item.get("sha") or ""
+
                 commits.append({
-                    "sha": item.get("sha")[:7], # we only need the short hash
-                    "author": item.get("commit", {}).get("author", {}).get("name"),
-                    "message": item.get("commit", {}).get("message", "").split('\n')[0], # First line only
-                    "date": item.get("commit", {}).get("author", {}).get("date")
+                    # we only want the short hash
+                    "sha": sha[:7],
+                    "author": author_info.get("name") if author_info else "",
+                    # we only want the first line of the message
+                    "message": message.split('\n')[0] if message else "",
+                    "date": author_info.get("date")
                 })
 
             return {
