@@ -5,6 +5,7 @@ import { APIGatewayProxyEvent, Context } from "aws-lambda";
 global.fetch = jest.fn();
 
 describe("BookTitleSearchFunction", () => {
+  // FIXME: is there a better way to do this?
   // Save the original env vars to restore after tests
   const originalEnv = process.env;
 
@@ -24,8 +25,8 @@ describe("BookTitleSearchFunction", () => {
   //
   // ========= Mock the API Gateway event =========
   //
-  // FIXME: add additional event properties? our handler function only uses
-  // `queryStringParameters` though so may be overkill
+  // NOTE: add additional event properties here as needed
+  // currently our handler function only uses `queryStringParameters`
   const createMockEvent = (
     queryStringParameters: any = {},
   ): APIGatewayProxyEvent =>
