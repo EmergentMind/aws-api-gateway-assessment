@@ -35,7 +35,7 @@ def handler(event, context):
         # FIXME: add sanitization and bounds
         query_params = event.get('queryStringParameters') or {}
         repo = query_params.get('repo')
-        
+
         if not repo:
             return {
                 "statusCode": 400,
@@ -53,7 +53,7 @@ def handler(event, context):
 
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode('utf-8'))
-            
+
             # extract and return the commit metadata we want
             commits = []
             for item in data:
