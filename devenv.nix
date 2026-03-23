@@ -23,8 +23,8 @@
     python = {
       enable = true;
       version = "3.13";
+      directory = "lambdas/lambda2";
       venv.enable = true;
-
       venv.requirements = ''
         coverage
         python-dotenv
