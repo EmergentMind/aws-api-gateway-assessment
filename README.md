@@ -78,11 +78,66 @@ The entire stack can be built, packaged, deployed, and tested using the provided
 
 ## Architecture & Design Decisions
 
-Each lambda has a self-contained environment and dependency config for its particular language and reqs.
+```mermaid
+flowchart LR
+    %% Flow
+    Client([Client / REST Client])
+
+    subgraph AWS_Cloud ["AWS Cloud"]
+        direction TB
+
+        subgraph Security_Layer ["Security & Identity"]
+            Cognito[(Amazon Cognito)]
+            IAM1{{IAM: LibrarySearch}}
+            IAM2{{IAM: GitHubActivity}}
+        end
+
+        subgraph Compute_Layer ["Serverless Backend"]
+            APIGW[AWS API Gateway]
+
+            subgraph Lambda_Functions ["Lambda Functions"]
+                L1[Lambda: Node.js/TS]
+                L2[Lambda: Python 3.13]
+            end
+        end
+    end
+
+    subgraph External_APIs ["External Services"]
+        direction LR
+        GBooks[Google Books API]
+        GHub[GitHub REST API]
+    end
+
+    %% Connections
+    Client -->|HTTPS + Token| APIGW
+    APIGW <-->|Authorize| Cognito
+
+    APIGW <-->|/books| L1
+    APIGW <-->|/activity| L2
+
+    L1 -.->|Assumes| IAM1
+    L2 -.->|Assumes| IAM2
+
+    L1 <-->|REST + API Key| GBooks
+    L2 <-->|REST + PAT| GHub
+
+    %% Styles
+    style AWS_Cloud fill:#999,stroke:#ff9900,stroke-width:2px
+    style Security_Layer fill:#777,stroke:#dd0000,stroke-dasharray: 5 5
+    style External_APIs fill:#444,stroke:#0000CC ,stroke-width:1px
+```
+
+### CloudFormation
 
 The Cognito User Pool, User Pool Client, and API Gateway authorizers are automated and provisioned via the CloudFormation template. No manual AWS console config is required.
 
-### TypeScript Lambda - `lambdas/lambda1`
+There are also distinct IAM roles, `GitHubActivity` and `LibrarySearch`, that are assigned to the respective lambdas.
+
+### Lambdas - `lambdas/`
+
+Each lambda has a self-contained environment and dependency config for its particular language and reqs.
+
+#### TypeScript Lambda - `lambdas/lambda1`
 
 This lambda integrates with the Google Books API and requires a Google API key. The lambda provides an endpoint (/books) for finding books by title. Data fetched from Google Books are limited to 5 books ("volumes") and are processed so that only a subset of the available metadata are returned through the endpoint.
 
@@ -94,7 +149,7 @@ Additionhal info:
 - compiled using `npx tsc`
 - unit tested with `jest`
 
-### Python Lambda - `lambdas/lambda2`
+#### Python Lambda - `lambdas/lambda2`
 
 This lambda integrates with the GitHub RESAT API and requires a GitHub Personal Access Token. The lambda provides an endpoint (/activity) for finding the latest commit history from specified GitHub repository. Data fetched from GitHub are limited to the last 10 commites and are processed so that only a subset of the available metadata are returned through the endpoint.
 
