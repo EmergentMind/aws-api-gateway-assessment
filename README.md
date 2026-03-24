@@ -32,22 +32,61 @@ function file names as described in the assessment instructions, in case they we
 
 To deploy and test this project locally, ensure you have the following installed:
 
-- AWS CLI (configured with active credentials)
-- Node.js & `pnpm` (for the TypeScript Lambda and Jest tests)
-- Python 3.13+ & `uv` (for the Python Lambda and Pytest tests)
-- `jq` (for parsing JSON in the testing scripts)
+- AWS CLI (configured with active credentials, see [AWS CLI Authentication](#aws-cli-authentication-sso-setup))
+- Node.js
+- `pnpm`
+- Python 3.13+
+- `uv`
+- `jq`
+
+#### AWS CLI Authentication - SSO Setup
+
+Before creating your S3 bucket or running the deployment scripts, your terminal must be authenticated with AWS. If you are using AWS IAM Identity Center (SSO), follow these steps to ensure the CLI and scripts use the correct credentials:
+
+1. Configure your SSO profile (if not already set up)
+
+   ```bash
+   aws configure sso
+   ```
+
+   Follow the prompts to enter your SSO Start URL, Region, and select your target account and role. Once complete, the CLI will output the name of your newly created profile (e.g., `AdministratorAccess-123456789012`).
+
+2. Set your active AWS profile
+   Export your profile name to the current shell environment. This ensure that subsequent AWS CLI commands and deployment scripts run from this shell route to the correct account:
+
+   ```bash
+   export AWS_PROFILE=<YOUR-PROFILE-NAME>
+   ```
+
+3. Authenticate
+
+   ```bash
+   aws sso login
+   ```
+
+   This will open a browser window to confirm your authorization. Once the terminal displays "Successfully logged in", you are ready to proceed.
 
 ## Configuration
 
 This repo separates public infrastructure config vars and private secrets.
 
-1. **Public Infrastructure Config - `assets/config.sh`**
+1. **Create an S3 bucket**
+
+   AWS CloudFormation requires an existing S3 bucket to store the packaged Lambda deployment zips. If you already have an S3 bucket that you will be using you can skip to the next step.
+
+   To create a globally unique S3 bucket using the AWS CLI:
+
+   ```bash
+   aws s3 mb s3://<GLOBALLY-UNIQUE-BUCKET-NAME>
+   ```
+
+2. **Public Infrastructure Config - `assets/config.sh`**
 
    This file contains non-sensitive variables and is committed to version control.
 
-   **Important:** You must update the `S3_BUCKET` variable in this file to a globally unique S3 bucket name before your first deployment. CloudFormation requires this bucket to store the packaged Lambda zips.
+   Open `assets/config.sh` and update the `S3_BUCKET` variable to match the exact name of the S3 bucket you will be using (a previously existing bucket or the one you created in the previous step).
 
-2. **Private Secrets - `.env`**
+3. **Private Secrets - `.env`**
 
    You _must_ create a `.env` file in git root. This file is ignored by git. The file _must_ contain the following keys:
 
@@ -57,14 +96,14 @@ This repo separates public infrastructure config vars and private secrets.
    TEST_USER_PASSWORD=<your-complex-password-for-cognito-test-user>
    ```
 
-   **Google Books API Key:** See the official documentation for how
+   **Google Books API Key:** See the official documentation for how to
    [aquire an API key for Google Books](https://developers.google.com/books/docs/v1/using#APIKey)
 
    **GitHub Token:** You can use either a [Classic](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) or [Fine-Grained](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) Personal Access Token. The Lambda that uses it only queries public repository activity and the token is strictly utilized to prevent rate-limiting from GitHub.
 
    **Cognito test user:** You may encounter errors if the value for `TEST_USER_PASSWORD` contains a `!` character. The test user is created using a dummy email address when `assets/test-enpoints.sh` is run, either directly or via other scripts.
 
-3. **Auotmation Scripts**
+4. **Auotmation Scripts**
 
    For quality of life, this repo uses bash automation scripts stored in the `assets/` directory as well as the `deploy-full.sh` script at gitroot. Ensure that each script has the execution bit enabled by using `chmod +x foo`.
 
@@ -74,6 +113,20 @@ The entire stack can be built, packaged, deployed, and tested using the provided
 
 ```bash
 ./deploy-full.sh
+```
+
+## Teardown
+
+To delete the deployed stack from AWS:
+
+```bash
+aws cloudformation wait stack-delete-complete --stack-name api-assessment-stack
+```
+
+To delete the S3 bucket, if you created one specifically for this assessment:
+
+```bash
+aws s3 rb s3://<BUCKET-NAME> --force
 ```
 
 ## Architecture & Design Decisions

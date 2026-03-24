@@ -30,7 +30,27 @@ echo "Stack details retrieved."
 echo "ApiUrl: $API_URL"
 echo "UserPoolClientId: $CLIENT_ID"
 
+# Fetch the User Pool ID dynamically based on the resource type
+USER_POOL_ID=$(aws cloudformation describe-stack-resources \
+  --stack-name "$STACK_NAME" \
+  --query "StackResources[?ResourceType=='AWS::Cognito::UserPool'].PhysicalResourceId" \
+  --output text)
+
 load_env_vars
+
+echo "Validating test user exists"
+# Attempt user sign up '|| true' if the user already exists
+aws cognito-idp sign-up \
+  --client-id "$CLIENT_ID" \
+  --username "testuser@example.com" \
+  --password "$TEST_USER_PASSWORD" >/dev/null 2>&1 || true
+
+# Confirm user can log in immediately without needing email verification code
+aws cognito-idp admin-confirm-sign-up \
+  --user-pool-id "$USER_POOL_ID" \
+  --username "testuser@example.com" >/dev/null 2>&1 || true
+
+echo "Authenticating test user"
 
 # Get the ID Token
 ID_TOKEN=$(aws cognito-idp initiate-auth \
@@ -44,6 +64,8 @@ if [ "$ID_TOKEN" = "" ] || [ "$ID_TOKEN" == "None" ]; then
   echo "Error: Authentication failed. Check your credentials in .env"
   exit 1
 fi
+
+echo "Test user authentication successful. Testing endpoints."
 
 test_api_endpoint "/books" "q=permutation city" "$ID_TOKEN"
 test_api_endpoint "/activity" "repo=torvalds/linux" "$ID_TOKEN"
