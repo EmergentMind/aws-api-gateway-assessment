@@ -13,6 +13,20 @@
 
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 
+enum HttpStatus {
+  OK = 200,
+  BAD_REQUEST = 400,
+  TOO_MANY_REQUESTS = 429,
+  INTERNAL_SERVER_ERROR = 500,
+  BAD_GATEWAY = 502,
+}
+
+const CONFIG = {
+  GOOGLE_BOOKS_URL: "https://www.googleapis.com/books/v1/volumes",
+  MAX_RESULTS: 5,
+  MAX_TITLE_LENGTH: 100,
+};
+
 // interfaces for expected data from Google Books
 interface GoogleVolumeInfo {
   title: string;
@@ -38,6 +52,15 @@ interface LibraryBookItem {
   isbn: string | null;
 }
 
+const createResponse = (
+  statusCode: HttpStatus,
+  body: object,
+): APIGatewayProxyResult => ({
+  statusCode,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
 export const handler = async (
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
@@ -48,47 +71,44 @@ export const handler = async (
       console.error(
         "Error: Missing GOOGLE_BOOKS_API_KEY environment variable.",
       );
-      return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Internal server error: Missing configuration data.",
-        }),
-      };
+      return createResponse(HttpStatus.INTERNAL_SERVER_ERROR, {
+        message: "Internal server error: Missing configuration data.",
+      });
     }
 
     // validate query parameter
-    // FIXME: add sanitization and bounds
-    const query = event.queryStringParameters?.q;
-    if (!query) {
-      return {
-        statusCode: 400,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Missing required query parameter: 'q'",
-        }),
-      };
+    const rawQuery = event.queryStringParameters?.q;
+    if (!rawQuery) {
+      return createResponse(HttpStatus.BAD_REQUEST, {
+        message: "Missing required query parameter: 'q'",
+      });
     }
+    // Limit query length and encode
+    if (rawQuery.length > CONFIG.MAX_TITLE_LENGTH) {
+      return createResponse(HttpStatus.BAD_REQUEST, {
+        message: "Query parameter 'q' is longer than maximum allowed length.",
+      });
+    }
+    const sanitizedQuery = encodeURIComponent(rawQuery);
 
     // fetch data from Google Books
-    // search through book titles only, return a maximum 5 results
-    const apiUrl = `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(query)}&maxResults=5&key=${apiKey}`;
+    // search through book titles only
+    const apiUrl = `${CONFIG.GOOGLE_BOOKS_URL}?q=intitle:${sanitizedQuery}&maxResults=${CONFIG.MAX_RESULTS}&key=${apiKey}`;
     const response = await fetch(apiUrl);
 
     // handle external errors
-    // FIXME: handle additional codes?
     if (!response.ok) {
       console.error(
         `Google Books API error: ${response.status} ${response.statusText}`,
       );
-      return {
-        // If we get '429 Too Many Requests' pass that, otherwise assume `502 Bad Gateway`
-        statusCode: response.status === 429 ? 429 : 502,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Error communicating with external service.",
-        }),
-      };
+      // If we get `429` pass that, otherwise assume `502`
+      const statusCode =
+        response.status === HttpStatus.TOO_MANY_REQUESTS
+          ? HttpStatus.TOO_MANY_REQUESTS
+          : HttpStatus.BAD_GATEWAY;
+      return createResponse(statusCode, {
+        message: "Error communicating with external service.",
+      });
     }
 
     const data = (await response.json()) as GoogleBooksResponse;
@@ -112,19 +132,11 @@ export const handler = async (
     });
 
     // Successful return successfully processed data
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ results: books }),
-    };
+    return createResponse(HttpStatus.OK, { results: books });
   } catch (error) {
     console.error("Unexpected error in BookTitleSearchFunction:", error);
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "An unexpected error occurred processing the request.",
-      }),
-    };
+    return createResponse(HttpStatus.INTERNAL_SERVER_ERROR, {
+      message: "An unexpected error occurred processing the request.",
+    });
   }
 };

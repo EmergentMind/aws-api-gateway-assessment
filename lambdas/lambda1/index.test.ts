@@ -5,21 +5,16 @@ import { APIGatewayProxyEvent, Context } from "aws-lambda";
 global.fetch = jest.fn();
 
 describe("BookTitleSearchFunction", () => {
-  // FIXME: is there a better way to do this?
-  // Save the original env vars to restore after tests
-  const originalEnv = process.env;
-
   beforeEach(() => {
-    jest.resetModules();
-    process.env = { ...originalEnv, GOOGLE_BOOKS_API_KEY: "mock-api-key" };
+    process.env.GOOGLE_BOOKS_API_KEY = "mock-api-key";
     jest.clearAllMocks();
 
     // mute console.error for expected failure logs
     jest.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  afterAll(() => {
-    process.env = originalEnv;
+  afterEach(() => {
+    delete process.env.GOOGLE_BOOKS_API_KEY;
   });
 
   //
@@ -138,13 +133,26 @@ describe("BookTitleSearchFunction", () => {
   // ========= Response Code Handling (non-200) =========
   //
   // ========= 400 series =========
-  it('returns 400 if "q" param is missing', async () => {
+  it("returns 400 if 'q' param is missing", async () => {
     const event = createMockEvent({});
     const response = await handler(event);
 
     expect(response.statusCode).toBe(400);
     expect(JSON.parse(response.body).message).toContain(
       "Missing required query parameter: 'q'",
+    );
+  });
+
+  it("returns 400 if 'q' exceeds 100 characters", async () => {
+    // Generate a string that is exactly 101 characters long
+    const massiveQuery = "a".repeat(101);
+    const event = createMockEvent({ q: massiveQuery } as any);
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toContain(
+      "longer than maximum allowed length",
     );
   });
 

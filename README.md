@@ -22,11 +22,13 @@ function file names as described in the assessment instructions, in case they we
 │   ├── lambda2
 ```
 
-- `assets/`: configuration and automation scripts
-- `docs/`: dev notes and additional documentation
-- `cloudformation/: CloudFormation scripts
+- `assets`: configuration and automation scripts
+- `docs`: dev notes and additional documentation
+- `cloudformation`: CloudFormation scripts
 - `lambdas/lambda1`: TypeScript Lambda integrating with the Google Books API.
 - `lambdas/lambda2`: Python Lambda integrating with the GitHub API.
+
+Note: There are several devenv files in git root. These are only important if you use nix and deven to maintain segregated development environments between project directories.
 
 ## Prerequisites
 
@@ -59,6 +61,7 @@ Before creating your S3 bucket or running the deployment scripts, your terminal 
    ```
 
 3. Authenticate
+   This step may be redundant if you needed to complete step 1.
 
    ```bash
    aws sso login
@@ -132,56 +135,9 @@ aws s3 rb s3://<BUCKET-NAME> --force
 
 ## Architecture & Design Decisions
 
-```mermaid
-flowchart LR
-    %% Flow
-    Client([Client / REST Client])
+![diagram](docs/diagram.png)
 
-    subgraph AWS_Cloud ["AWS Cloud"]
-        direction TB
-
-        subgraph Security_Layer ["Security & Identity"]
-            Cognito[(Amazon Cognito)]
-            IAM1{{IAM: LibrarySearch}}
-            IAM2{{IAM: GitHubActivity}}
-        end
-
-        subgraph Compute_Layer ["Serverless Backend"]
-            APIGW[AWS API Gateway]
-
-            subgraph Lambda_Functions ["Lambda Functions"]
-                L1[Lambda: Node.js/TS]
-                L2[Lambda: Python 3.13]
-            end
-        end
-    end
-
-    subgraph External_APIs ["External Services"]
-        direction LR
-        GBooks[Google Books API]
-        GHub[GitHub REST API]
-    end
-
-    %% Connections
-    Client -->|HTTPS + Token| APIGW
-    APIGW <-->|Authorize| Cognito
-
-    APIGW <-->|/books| L1
-    APIGW <-->|/activity| L2
-
-    IAM1 -.->|Assumes| L1
-    IAM2 -.->|Assumes| L2
-
-    L1 <-->|REST + API Key| GBooks
-    L2 <-->|REST + PAT| GHub
-
-    %% Styles
-    style AWS_Cloud fill:#999,stroke:#ff9900,stroke-width:2px
-    style Security_Layer fill:#777,stroke:#dd0000,stroke-dasharray: 5 5
-    style External_APIs fill:#444,stroke:#0000CC ,stroke-width:1px
-```
-
-### CloudFormation
+### AWS via CloudFormation
 
 The Cognito User Pool, User Pool Client, and API Gateway authorizers are automated and provisioned via the CloudFormation template. No manual AWS console config is required.
 

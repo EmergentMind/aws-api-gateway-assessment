@@ -1,6 +1,7 @@
 import json
 import os
 import pytest
+from http import HTTPStatus
 from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError
 
@@ -69,7 +70,6 @@ def test_successful_github_api_call(mock_urlopen, mock_env):
 ##
 ## ========= Data Handling =========
 ##
-#FIXME(pytest): test more edge cases
 @patch('urllib.request.urlopen')
 def test_malformed_github_data(mock_urlopen, mock_env):
     # Mock payload missing several expected keys
@@ -90,7 +90,7 @@ def test_malformed_github_data(mock_urlopen, mock_env):
     event = create_mock_event({"repo": "tarnover/project-321"})
     response = handler(event, None)
     
-    assert response.get("statusCode") == 200
+    assert response.get("statusCode") == HTTPStatus.OK
     
     body = json.loads(response.get("body"))
     first_commit = body.get("results")[0]
@@ -108,20 +108,29 @@ def test_missing_repo_parameter(mock_env):
     event = create_mock_event({})
     response = handler(event, None)
 
-    assert response.get("statusCode") == 400
+    assert response.get("statusCode") == HTTPStatus.BAD_REQUEST
     body = json.loads(response.get("body"))
     assert "Missing required query parameter" in body.get("message")
+
+def test_query_exceeds_max_length(mock_env):
+    massive_query = "a" * 101
+    event = create_mock_event({"repo": massive_query })
+    response = handler(event, None)
+
+    assert response.get("statusCode") == HTTPStatus.BAD_REQUEST
+    body = json.loads(response.get("body"))
+    assert "longer than maximum allowed length" in body.get("message")
 
 @patch('urllib.request.urlopen')
 def test_github_rate_limit(mock_urlopen, mock_env):
     # Simulate a 403 Rate Limit error from GitHub
-    error = HTTPError(url="", code=403, msg="Forbidden", hdrs=None, fp=None)
+    error = HTTPError(url="", code=HTTPStatus.FORBIDDEN, msg="Forbidden", hdrs=None, fp=None)
     mock_urlopen.side_effect = error
 
     event = create_mock_event({"repo": "tarnover/project-321"})
     response = handler(event, None)
 
-    assert response.get("statusCode") == 429
+    assert response.get("statusCode") == HTTPStatus.TOO_MANY_REQUESTS
     body = json.loads(response.get("body"))
     assert "Error communicating" in body.get("message")
 
@@ -132,7 +141,7 @@ def test_missing_github_token():
         event = create_mock_event({"repo": "tarnover/project-321"})
         response = handler(event, None)
 
-        assert response.get("statusCode") == 500
+        assert response.get("statusCode") == HTTPStatus.INTERNAL_SERVER_ERROR
         body = json.loads(response.get("body"))
         assert "Missing configuration data" in body.get("message")
 
@@ -144,22 +153,19 @@ def test_unhandled_exception_catch(mock_urlopen, mock_env):
     event = create_mock_event({"repo": "tarnover/project-321"})
     response = handler(event, None)
     
-    assert response.get("statusCode") == 500
+    assert response.get("statusCode") == HTTPStatus.INTERNAL_SERVER_ERROR
     body = json.loads(response.get("body"))
     assert "An unexpected error occurred" in body.get("message")
 
 @patch('urllib.request.urlopen')
 def test_github_api_502_fallback(mock_urlopen, mock_env):
     # Simulate a generic 500 Internal Server Error from GitHub
-    error = HTTPError(url="", code=500, msg="Internal Server Error", hdrs=None, fp=None)
+    error = HTTPError(url="", code=HTTPStatus.INTERNAL_SERVER_ERROR, msg="Internal Server Error", hdrs=None, fp=None)
     mock_urlopen.side_effect = error
 
     event = create_mock_event({"repo": "tarnover/project-321"})
     response = handler(event, None)
 
-    assert response.get("statusCode") == 502
+    assert response.get("statusCode") == HTTPStatus.BAD_GATEWAY
     body = json.loads(response.get("body"))
     assert "Error communicating" in body.get("message")
-
-
-
