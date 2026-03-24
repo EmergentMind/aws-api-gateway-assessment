@@ -29,7 +29,7 @@ function verify_aws_session() {
   if ! aws sts get-caller-identity >/dev/null 2>&1; then
     echo "AWS session expired or not found."
 
-    # TODO(QoL): his is just to make my life easier for assessment but depending on
+    # TODO(QoL): this is just to make my life easier for assessment but depending on
     # how others auth it should factor in other methods
     echo "Attempting AWS SSO login..."
     if ! aws sso login; then

@@ -77,7 +77,7 @@ Resources:
       Runtime: nodejs20.x
       Handler: index.handler
       Role: !GetAtt LibrarySearchExecutionRole.Arn
-      Code: ../lambdas/lambda1
+      Code: ../lambdas/lambda1/deployment-package.zip
       Environment:
         Variables:
           GOOGLE_BOOKS_API_KEY: !Ref GoogleBooksApiKey
@@ -88,7 +88,7 @@ Resources:
       Runtime: python3.13
       Handler: lambda_function.handler
       Role: !GetAtt GitHubActivityExecutionRole.Arn
-      Code: ../lambdas/lambda2
+      Code: ../lambdas/lambda2/deployment-package.zip
       Environment:
         Variables:
           GITHUB_TOKEN: !Ref GitHubToken

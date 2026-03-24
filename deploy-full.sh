@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
-#build typescript
+#build python lambda
+./assets/build-py.sh
+#build typescript lambda
 ./assets/build-ts.sh
-#package and deploy
-./assets/pkg-deploy.sh
+#package
+./assets/package.sh
+#deploy
+./assets/deploy.sh
 #verify endpoints are up
 ./assets/test-endpoints.sh
 
