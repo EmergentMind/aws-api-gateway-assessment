@@ -120,6 +120,7 @@ The entire stack can be built, packaged, deployed, and tested using the provided
 To delete the deployed stack from AWS:
 
 ```bash
+aws cloudformation delete-stack --stack-name api-assessment-stack &&
 aws cloudformation wait stack-delete-complete --stack-name api-assessment-stack
 ```
 
@@ -168,8 +169,8 @@ flowchart LR
     APIGW <-->|/books| L1
     APIGW <-->|/activity| L2
 
-    L1 -.->|Assumes| IAM1
-    L2 -.->|Assumes| IAM2
+    IAM1 -.->|Assumes| L1
+    IAM2 -.->|Assumes| L2
 
     L1 <-->|REST + API Key| GBooks
     L2 <-->|REST + PAT| GHub
