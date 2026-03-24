@@ -1,15 +1,212 @@
 # AWS API Gateway Assessment
 
-This repository contains my solution to the AWS API Gateway Assessment.
+This repository contains an infrastructure-as-code deployment for a serverless API hosted on AWS. It provisions an API Gateway for two distinct AWS Lambda functions (TypeScript and Python) and includes automated deployment and testing pipelines.
 
-## Deployment Guide
+For API service seletion I chose Google Books API for the TypeScript lambda and
+GitHub REST API for the Python lambda. I made these selections based on a rudimentary scenario I gave myself for the assessment where group reading activity is tracked in a shared git repo. The users want an app that can check recent reading activity and then look up a bit of information about the books people are reading. The lambdas could be a small part of that solution.
 
-### Requirements and Dependencies
+## Repository Structure
 
-### Creating and configuring the Congito User Pool
+**Assessment Note:** For simplicity I intentionally stuck with the directory and lambda
+function file names as described in the assessment instructions, in case they were intended as hard reqs. Under other circumstances I would use naming that matches the utility of each function.
 
-### Deploying the CloudFormation script to AWS
+```
+/aws-api-gateway-assessment
+├── README.md
+├── assets
+├── docs
+├── cloudformation
+│   ├── main.yaml - main cloudformation script
+├── lambdas
+│   ├── lambda1
+│   ├── lambda2
+```
 
-### Invoking Lambda funtions
+- `assets/`: configuration and automation scripts
+- `docs/`: dev notes and additional documentation
+- `cloudformation/: CloudFormation scripts
+- `lambdas/lambda1`: TypeScript Lambda integrating with the Google Books API.
+- `lambdas/lambda2`: Python Lambda integrating with the GitHub API.
 
-## Structure
+## Prerequisites
+
+To deploy and test this project locally, ensure you have the following installed:
+
+- AWS CLI (configured with active credentials)
+- Node.js & `pnpm` (for the TypeScript Lambda and Jest tests)
+- Python 3.13+ & `uv` (for the Python Lambda and Pytest tests)
+- `jq` (for parsing JSON in the testing scripts)
+
+## Configuration
+
+This repo separates public infrastructure config vars and private secrets.
+
+1. **Public Infrastructure Config - `assets/config.sh`**
+
+   This file contains non-sensitive variables and is committed to version control.
+
+   **Important:** You must update the `S3_BUCKET` variable in this file to a globally unique S3 bucket name before your first deployment. CloudFormation requires this bucket to store the packaged Lambda zips.
+
+2. **Private Secrets - `.env`**
+
+   You _must_ create a `.env` file in git root. This file is ignored by git. The file _must_ contain the following keys:
+
+   ```env
+   GOOGLE_BOOKS_API_KEY=<your_google_api_key>
+   GITHUB_TOKEN=<your_github_personal_access_token>
+   TEST_USER_PASSWORD=<your-complex-password-for-cognito-test-user>
+   ```
+
+   **Google Books API Key:** See the official documentation for how
+   [aquire an API key for Google Books](https://developers.google.com/books/docs/v1/using#APIKey)
+
+   **GitHub Token:** You can use either a [Classic](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) or [Fine-Grained](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) Personal Access Token. The Lambda that uses it only queries public repository activity and the token is strictly utilized to prevent rate-limiting from GitHub.
+
+   **Cognito test user:** You may encounter errors if the value for `TEST_USER_PASSWORD` contains a `!` character. The test user is created using a dummy email address when `assets/test-enpoints.sh` is run, either directly or via other scripts.
+
+3. **Auotmation Scripts**
+
+   For quality of life, this repo uses bash automation scripts stored in the `assets/` directory as well as the `deploy-full.sh` script at gitroot. Ensure that each script has the execution bit enabled by using `chmod +x foo`.
+
+## Deployment
+
+The entire stack can be built, packaged, deployed, and tested using the provided wrapper script:
+
+```bash
+./deploy-full.sh
+```
+
+## Architecture & Design Decisions
+
+Each lambda has a self-contained environment and dependency config for its particular language and reqs.
+
+The Cognito User Pool, User Pool Client, and API Gateway authorizers are automated and provisioned via the CloudFormation template. No manual AWS console config is required.
+
+### TypeScript Lambda - `lambdas/lambda1`
+
+This lambda integrates with the Google Books API and requires a Google API key. The lambda provides an endpoint (/books) for finding books by title. Data fetched from Google Books are limited to 5 books ("volumes") and are processed so that only a subset of the available metadata are returned through the endpoint.
+
+This lambda can be built for AWS from git root by running `./assets/build-ts.sh`
+
+Additionhal info:
+
+- package management using `pnpm`
+- compiled using `npx tsc`
+- unit tested with `jest`
+
+### Python Lambda - `lambdas/lambda2`
+
+This lambda integrates with the GitHub RESAT API and requires a GitHub Personal Access Token. The lambda provides an endpoint (/activity) for finding the latest commit history from specified GitHub repository. Data fetched from GitHub are limited to the last 10 commites and are processed so that only a subset of the available metadata are returned through the endpoint.
+
+This lambda can be built for WAS from git root by running `./assets/build-py.sh`
+
+Additionhal info:
+
+- package management using `uv`
+- unit tested with `pytest`
+
+## Testing
+
+### Unit Tests
+
+Both Lambda functions are unit tested to validate successful data mapping, missing query parameters, external API errors, and global exception handling.
+
+To run all unit test, run `./unit-tests-full.sh` from git root.
+
+To manually run jest test for lambda1:
+
+```bash
+cd lambdas/lambda1
+pnpm install
+pnpm test
+```
+
+To manually run pytest for lambda2:
+
+```bash
+cd lambdas/lambda2
+uv sync
+uv run pytest
+```
+
+### Deployed API Integration Tests
+
+Once the stack is deployed, you can execute the integration tests directly to verify API Gateway, Cognito authentication, and the Lambda integrations. The script automatically fetches the dynamic API URL and Client ID directly from the CloudFormation stack outputs, authenticates the test user, and fires requests at both endpoints. Note that this test also runs automatically when `./deploy-full.sh` runs.
+
+```bash
+./assets/test-endpoints.sh
+```
+
+## Endpoint Details & Sample Requests
+
+The API Gateway requires a valid Cognito ID token passed in the `Authorization` header for all requests. The CloudFormation stack automatically provisions the necessary User Pool and Authorizer.
+
+#### 1. Google Books Search (`/books`)
+
+**Method:** `GET`
+**Query Parameters:** \* `q` (required): The title of the book to search for.
+
+**Sample Request:**
+
+```bash
+curl -X GET "https://<YOUR_API_ID>.execute-api.<REGION>.amazonaws.com/prod/books?q=permutation+city" \
+     -H "Authorization: Bearer <YOUR_COGNITO_ID_TOKEN>"
+```
+
+**Expected Response (200 OK):**
+
+```json
+{
+  "results": [
+    {
+      "id": "-VU0AgAAQBAJ",
+      "title": "Permutation City",
+      "authors": ["Greg Egan"],
+      "isbn": "9780575105454"
+    },
+    {
+      "id": "RzY4mwEACAAJ",
+      "title": "City Permutation",
+      "authors": ["Gunho Kim"],
+      "isbn": null
+    }
+  ]
+}
+```
+
+_(Note: Response truncated for brevity. The API returns up to 5 volumes.)_
+
+#### 2. GitHub Repository Activity (`/activity`)
+
+**Method:** `GET`
+**Query Parameters:** \* `repo` (required): The target repository in `owner/repo` format.
+
+**Sample Request:**
+
+```bash
+curl -X GET "https://<YOUR_API_ID>.execute-api.<REGION>.amazonaws.com/prod/activity?repo=torvalds/linux" \
+     -H "Authorization: Bearer <YOUR_COGNITO_ID_TOKEN>"
+```
+
+**Expected Response (200 OK):**
+
+```json
+{
+  "results": [
+    {
+      "sha": "c369299",
+      "author": "Linus Torvalds",
+      "message": "Linux 7.0-rc5",
+      "date": "2026-03-22T21:42:17Z"
+    },
+    {
+      "sha": "ec69c9e",
+      "author": "Mikko Perttunen",
+      "message": "i2c: tegra: Don't mark devices with pins as IRQ safe",
+      "date": "2026-03-03T04:32:11Z"
+    }
+  ]
+}
+```
+
+_(Note: Response truncated for brevity. The API returns up to 10 recent commits.)_
