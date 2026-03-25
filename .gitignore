@@ -17,6 +17,7 @@ credentials
 .aws-credentials
 
 # Environment and configuration files
+.envrc
 .env
 .env.local
 .env.*.local

@@ -1,0 +1,194 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AWS API Gateway for assessment. Uses lambdas to connect with Goolge Books and GitHub.
+
+#
+# ========= Parameters =========
+#
+Parameters:
+  GoogleBooksApiKey:
+    Type: String
+    Description: Key for Google Books API
+    NoEcho: true
+  GitHubToken:
+    Type: String
+    Description: Personal Access Token for GitHub REST API
+    NoEcho: true
+#
+# ========= Resources =========
+#
+# Organized by architectural layer
+Resources:
+  # ========= User Pool =========
+  ApiUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: AssessmentUserPool
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+  ApiUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: AssessmentAppClient
+      UserPoolId: !Ref ApiUserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+  # ========= IAM Roles =========
+  LibrarySearchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  GitHubActivityExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  # ========= Lambdas =========
+  BookTitleSearchFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: BookTitleSearchFunction
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LibrarySearchExecutionRole.Arn
+      Code: ../lambdas/lambda1/deployment-package.zip
+      Environment:
+        Variables:
+          GOOGLE_BOOKS_API_KEY: !Ref GoogleBooksApiKey
+  GitHubActivityFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GitHubActivityFunction
+      Runtime: python3.13
+      Handler: lambda_function.handler
+      Role: !GetAtt GitHubActivityExecutionRole.Arn
+      Code: ../lambdas/lambda2/deployment-package.zip
+      Environment:
+        Variables:
+          GITHUB_TOKEN: !Ref GitHubToken
+  # ========= API Gateway =========
+  AssessmentApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: AssessmentApi
+      Description: API Gateway for assessment assignment
+  CognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: CognitoUserPoolAuthorizer
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      RestApiId: !Ref AssessmentApi
+      ProviderARNs:
+        - !GetAtt ApiUserPool.Arn
+  # ========= API Permissions =========
+  GitHubActivityApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GitHubActivityFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AssessmentApi}/*/GET/activity
+  LibrarySearchApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BookTitleSearchFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AssessmentApi}/*/GET/books
+  # ========= API Resources and Methods =========
+  # (/activity)
+  ActivityResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt AssessmentApi.RootResourceId
+      PathPart: activity
+      RestApiId: !Ref AssessmentApi
+  ActivityGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      ResourceId: !Ref ActivityResource
+      RestApiId: !Ref AssessmentApi
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt GitHubActivityFunction.Arn
+  # (/books)
+  BooksResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt AssessmentApi.RootResourceId
+      PathPart: books
+      RestApiId: !Ref AssessmentApi
+  BooksGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      ResourceId: !Ref BooksResource
+      RestApiId: !Ref AssessmentApi
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt BookTitleSearchFunction.Arn
+  # ========= API Deployment =========
+  ApiDeploymentV2:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ActivityGetMethod
+      - BooksGetMethod
+    Properties:
+      RestApiId: !Ref AssessmentApi
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref ApiDeploymentV2
+      RestApiId: !Ref AssessmentApi
+      StageName: prod
+#
+# ========= OUTPUTS =========
+#
+Outputs:
+  UserPoolId:
+    Description: ID of the Cognito User Pool
+    Value: !Ref ApiUserPool
+  UserPoolClientId:
+    Description: ID of the Cognito App Client
+    Value: !Ref ApiUserPoolClient
+  ApiUrl:
+    Description: Base URL for API Gateway
+    Value: !Sub https://${AssessmentApi}.execute-api.${AWS::Region}.amazonaws.com/prod
